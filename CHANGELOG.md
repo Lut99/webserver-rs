@@ -4,6 +4,12 @@ This file keeps track of notable changes to the Static Website Host codebase.
 Note that this project uses [semantic versioning](https://semver.org). Breaking changes are indicated with **(BREAKING)**.
 
 
+## v1.0.1 - 2025-01-13
+### Fixed
+- Broken references to `static-website-host` in Dockerfile.
+- docker-compose.yml file still using unintended port 80 instead of 42080.
+
+
 ## v1.0.0 - 2025-01-13
 Renamed to `webserver`. **(BREAKING)**
 

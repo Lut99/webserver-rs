@@ -1,4 +1,4 @@
-# DOCKERFILE for the `static-website-host` binary
+# DOCKERFILE for the `webserver` binary
 #   by Lut99
 
 
@@ -19,9 +19,9 @@ COPY src /source/src
 # Build it
 WORKDIR /source
 RUN --mount=type=cache,id=cargoidx,target=/usr/local/cargo/registry \
-    --mount=type=cache,id=static-website-host,target=/source/target \
-    cargo build --release --bin static-website-host \
- && cp /source/target/release/static-website-host /source/static-website-host
+    --mount=type=cache,id=webserver,target=/source/target \
+    cargo build --release --bin webserver \
+ && cp /source/target/release/webserver /source/webserver
 
 
 
@@ -34,12 +34,12 @@ ARG UID=1000
 ARG GID=1000
 
 # Setup a user mirroring the main one
-RUN addgroup -g $GID static-website-host
-RUN adduser -u $UID -G static-website-host -g "Static website Host" -D static-website-host
+RUN addgroup -g $GID webserver
+RUN adduser -u $UID -G webserver -g "Webserver-rs" -D webserver
 
 # Copy the binary from the build
-COPY --from=build --chown=static-website-host:static-website-host /source/static-website-host /static-website-host
+COPY --from=build --chown=webserver:webserver /source/webserver /webserver
 
 # Alrighty define the entrypoint and be done with it
-USER static-website-host
-ENTRYPOINT [ "/static-website-host" ]
+USER webserver
+ENTRYPOINT [ "/webserver" ]
