@@ -1,26 +1,30 @@
 [package]
-name = "static-website-host"
-version = "0.1.0"
+name = "webserver"
+version = "1.0.0"
 edition = "2021"
-repository = "https://github.com/Lut99/static-website-host"
+repository = "https://github.com/Lut99/webserver-rs"
 description = "An `axum-`based webserver that can be used to do simple static website hosting."
 
 
 [dependencies]
-axum = "0.7"
-axum-extra = { version = "0.9", features = ["async-read-body"] }
-axum-macros = { version = "0.4", optional = true }
-clap = { version = "4.5", features = ["derive"] }
+axum = "0.8.1"
+axum-extra = { version = "0.10.0", features = ["async-read-body"] }
+axum-macros = { version = "0.5.0", optional = true }
+base64ct = { version = "1.6.0", features = ["std"] }
+clap = { version = "4.5.26", features = ["derive"] }
 error-trace = { git = "https://github.com/Lut99/error-trace-rs" }
 humanlog = { git = "https://github.com/Lut99/humanlog-rs" }
-hyper = "1.4"
-hyper-util = "0.1"
-log = "0.4"
-serde = { version = "1.0", features = ["derive"] }
-serde_yml = "0.0.10"
-tokio = { version = "1.38", default-features = false, features = ["fs", "macros", "rt", "rt-multi-thread", "signal"]}
-tower-service = "0.3"
+hyper = "1.5.2"
+hyper-util = "0.1.10"
+log = "0.4.22"
+serde = { version = "1.0.217", features = ["derive"] }
+serde_yml = "0.0.12"
+thiserror = "2.0.11"
+tokio = { version = "1.43.0", default-features = false, features = ["fs", "macros", "rt", "rt-multi-thread", "signal"]}
+tower-service = "0.3.3"
 
 
 [features]
+default = []
+
 axum-debug = ["dep:axum-macros"]

@@ -4,7 +4,7 @@
 //  Created:
 //    17 Jul 2024, 19:03:23
 //  Last edited:
-//    17 Jul 2024, 22:29:57
+//    13 Jan 2025, 22:29:51
 //  Auto updated?
 //    Yes
 //
@@ -12,14 +12,14 @@
 //!   Represents runtime state shared by paths.
 //
 
-use std::fmt::{Display, Formatter, Result as FResult};
+use std::fs;
 use std::fs::File;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
-use std::{error, fs};
 
 use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 
 /***** CONSTANTS *****/
@@ -42,55 +42,119 @@ const DEFAULT_NOT_FOUND_FILE: &'static str = r#"
 
 /***** ERRORS *****/
 /// Defines errors thrown by the [`Context`].
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum Error {
     /// Failed to open the target config file.
-    ConfigOpen { path: PathBuf, err: std::io::Error },
+    #[error("Failed to open config file '{}'", path.display())]
+    ConfigOpen {
+        path: PathBuf,
+        #[source]
+        err:  std::io::Error,
+    },
     /// Failed to read & parse the target config file.
-    ConfigParse { path: PathBuf, err: serde_yml::Error },
+    #[error("Failed to read & parse config file '{}'", path.display())]
+    ConfigParse {
+        path: PathBuf,
+        #[source]
+        err:  serde_yml::Error,
+    },
 
     /// Failed to create a default config file.
-    ConfigCreate { path: PathBuf, err: std::io::Error },
+    #[error("Failed to create default config file '{}'", path.display())]
+    ConfigCreate {
+        path: PathBuf,
+        #[source]
+        err:  std::io::Error,
+    },
     /// Failed to write to the default config file.
-    ConfigWrite { path: PathBuf, err: serde_yml::Error },
+    #[error("Failed to write to default config file '{}'", path.display())]
+    ConfigWrite {
+        path: PathBuf,
+        #[source]
+        err:  serde_yml::Error,
+    },
     /// Failed to create a default not found file.
-    NotFoundFileCreate { path: PathBuf, err: std::io::Error },
+    #[error("Failed to create default not found file '{}'", path.display())]
+    NotFoundFileCreate {
+        path: PathBuf,
+        #[source]
+        err:  std::io::Error,
+    },
     /// Failed to canonicalize the site directory path.
-    SiteDirCanonicalize { path: PathBuf, err: std::io::Error },
+    #[error("Failed to canonicalize site directory path '{}'", path.display())]
+    SiteDirCanonicalize {
+        path: PathBuf,
+        #[source]
+        err:  std::io::Error,
+    },
     /// Failed to create the site directory.
-    SiteDirCreate { path: PathBuf, err: std::io::Error },
+    #[error("Failed to create site directory '{}'", path.display())]
+    SiteDirCreate {
+        path: PathBuf,
+        #[source]
+        err:  std::io::Error,
+    },
 }
-impl Display for Error {
-    #[inline]
-    fn fmt(&self, f: &mut Formatter<'_>) -> FResult {
-        use Error::*;
-        match self {
-            ConfigOpen { path, .. } => write!(f, "Failed to open config file '{}'", path.display()),
-            ConfigParse { path, .. } => write!(f, "Failed to read & parse config file '{}'", path.display()),
 
-            ConfigCreate { path, .. } => write!(f, "Failed to create default config file '{}'", path.display()),
-            ConfigWrite { path, .. } => write!(f, "Failed to write to default config file '{}'", path.display()),
-            NotFoundFileCreate { path, .. } => write!(f, "Failed to create default not found file '{}'", path.display()),
-            SiteDirCanonicalize { path, .. } => write!(f, "Failed to canonicalize site directory path '{}'", path.display()),
-            SiteDirCreate { path, .. } => write!(f, "Failed to create site directory '{}'", path.display()),
-        }
-    }
+
+
+
+
+/***** AUXILLARY *****/
+/// Defines the possible modes of authorization.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum AuthMode {
+    /// Using HTTP Basic Authentication to do the auth.
+    Basic {
+        /// The username to check for.
+        username: String,
+        /// The password to check for.
+        password: String,
+    },
+
+    /// No security is applied.
+    None,
 }
-impl error::Error for Error {
+// Constructors
+impl AuthMode {
+    /// Creates an AuthMode that uses HTTP Basic Authentication.
+    ///
+    /// # Arguments
+    /// - `username`: The username to check for.
+    /// - `password`: The password to check for.
+    ///
+    /// # Returns
+    /// An [`AuthMode::Basic`] that will make the server require the given `username` and
+    /// `password` upon accessing assets.
     #[inline]
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        use Error::*;
-        match self {
-            ConfigOpen { err, .. } => Some(err),
-            ConfigParse { err, .. } => Some(err),
-
-            ConfigCreate { err, .. } => Some(err),
-            ConfigWrite { err, .. } => Some(err),
-            NotFoundFileCreate { err, .. } => Some(err),
-            SiteDirCanonicalize { err, .. } => Some(err),
-            SiteDirCreate { err, .. } => Some(err),
-        }
+    pub fn basic(username: impl Into<String>, password: impl Into<String>) -> Self {
+        Self::Basic { username: username.into(), password: password.into() }
     }
+
+    /// Creates an AuthMode that uses no authentication.
+    ///
+    /// This is the default if nothing is supplied.
+    ///
+    /// # Returns
+    /// An [`AuthMode::None`] that will make the server require jack shit upon accessing assets.
+    #[inline]
+    pub const fn none() -> Self { Self::None }
+}
+// Enum stuff
+impl AuthMode {
+    /// Checks whether this AuthMode is an [`AuthMode::Basic`].
+    ///
+    /// # Returns
+    /// True if it is, false if it isn't.
+    #[inline]
+    pub const fn is_basic(&self) -> bool { matches!(self, Self::Basic { .. }) }
+
+    /// Checks whether this AuthMode is an [`AuthMode::None`].
+    ///
+    /// # Returns
+    /// True if it is, false if it isn't.
+    #[inline]
+    pub const fn is_none(&self) -> bool { matches!(self, Self::None) }
 }
 
 
@@ -112,6 +176,9 @@ pub struct Context {
     pub site: PathBuf,
     /// The file sent back when a file isn't found.
     pub not_found_file: PathBuf,
+    /// Whether to apply security.
+    #[serde(alias = "authorization", alias = "authorisation", default = "AuthMode::none", skip_serializing_if = "AuthMode::is_none")]
+    pub auth: AuthMode,
 }
 impl Context {
     /// Constructor for the Context that loads it from a given file.
@@ -138,7 +205,7 @@ impl Context {
                 if err.kind() == ErrorKind::NotFound {
                     // Generate a default one instead
                     info!("No config file found at '{}'; generating default...", path.display());
-                    let def: Self = Self { name, version, site: "./www".into(), not_found_file: "./www/not_found.html".into() };
+                    let def: Self = Self { name, version, site: "./www".into(), not_found_file: "./www/not_found.html".into(), auth: AuthMode::None };
                     match File::create(path) {
                         Ok(handle) => {
                             if let Err(err) = serde_yml::to_writer(handle, &def) {

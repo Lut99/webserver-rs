@@ -4,7 +4,7 @@
 //  Created:
 //    17 Jul 2024, 18:59:08
 //  Last edited:
-//    17 Jul 2024, 19:03:51
+//    13 Jan 2025, 22:03:54
 //  Auto updated?
 //    Yes
 //
@@ -14,5 +14,6 @@
 //
 
 // Declare modules
+pub mod auth;
 pub mod state;
 pub mod www;

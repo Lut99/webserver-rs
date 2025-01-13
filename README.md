@@ -1,4 +1,4 @@
-# static-website-host
+# webserver-rs
 A generalised Rust webserver for hosting static website files.
 
 
@@ -16,21 +16,21 @@ Then you can build the project by running:
 cargo build --release
 ```
 
-The resulting binary is found under `target/release/static-website-host`.
+The resulting binary is found under `target/release/webserver`.
 
 
 ### Docker build
 To build the container in Docker, run:
 ```sh
-docker build -t static-website-host -f Dockerfile --target release .
+docker build -t webserver -f Dockerfile --target release .
 ```
 
 > NOTE: If you're using Docker's buildx plugin as standard, don't forget to specify `--load`:
 > ```sh
-> docker build --load -t static-website-host:latest -f Dockerfile --target release .
+> docker build --load -t webserver:latest -f Dockerfile --target release .
 > ```
 
-This creates a `static-website-host` image in your local Docker daemon.
+This creates a `webserver` image in your local Docker daemon.
 
 
 ## Usage
@@ -38,12 +38,12 @@ To use the server, create a `www` directory and put your website files in it.
 
 Then, launch the server. If you installed it [natively](#native-build), run:
 ```sh
-./target/release/static-website-host
+./target/release/webserver
 ```
 
 If you installed it with [Docker](#docker-build), run:
 ```sh
-docker run -d --name static-website-host -v "$(pwd)/www:/www" -v "$(pwd)/config.yml:/config.yml"  -p 42080:42080 static-website-host --address 0.0.0.0:42080
+docker run -d --name webserver -v "$(pwd)/www:/www" -v "$(pwd)/config.yml:/config.yml"  -p 42080:42080 webserver --address 0.0.0.0:42080
 ```
 
 In both cases, you can now access your site under `http://localhost:42080`.
@@ -52,8 +52,6 @@ You can also launch your server using Docker Compose if you've built with Docker
 ```sh
 docker compose up -d
 ```
-
-Note that in that case, the server is launched under port `80` instead of `42080`.
 
 ### Config
 To configure the server, look at `config.yml`:
@@ -65,9 +63,24 @@ not_found_file: './www/not_found.html'
 ```
 Either is generated if it doesn't exist yet.
 
+You can also define additional security for your website with the `auth`-field:
+```yaml
+# ...
+
+# This will disable all auth (default)
+auth: !None
+
+# This will enable HTTP Basic authentication
+auth: !Basic
+  username: "Dr. Evil"
+  password: "unhackable"
+```
+
+> Currently, only [Basic auth](https://developer.mozilla.org/en-US/docs/Web/HTTP/Authentication) is supported as authentication method. Note that this does NOT encrypt username / password, and the server doesn't support TLS; so this is, in general, not recommended unless you have an HTTP proxy sitting in front that handles TLS.
+
 
 ## Contributions
-Contributions to this project are welcome! Create an [issue](Lut99/static-website-host/issues) if you have a question, idea or encountered a bug; or go ahead and create a [pull request](Lut99/static-website-host/pulls) if you already did the change yourself.
+Contributions to this project are welcome! Create an [issue](Lut99/webserver/issues) if you have a question, idea or encountered a bug; or go ahead and create a [pull request](Lut99/webserver/pulls) if you already did the change yourself.
 
 
 ## License

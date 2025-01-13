@@ -4,7 +4,7 @@
 //  Created:
 //    17 Jul 2024, 18:59:49
 //  Last edited:
-//    17 Jul 2024, 19:48:11
+//    13 Jan 2025, 22:39:35
 //  Auto updated?
 //    Yes
 //
@@ -13,14 +13,15 @@
 //
 
 use std::ffi::OsStr;
+use std::net::SocketAddr;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 
-use axum::extract::{self, State};
+use axum::extract::{self, ConnectInfo, State};
 use axum::http::HeaderValue;
 use axum_extra::body::AsyncReadBody;
 use error_trace::trace;
-use hyper::{header, HeaderMap, StatusCode};
+use hyper::{HeaderMap, StatusCode, header};
 use log::{debug, error, info};
 use tokio::fs::File;
 
@@ -101,9 +102,13 @@ async fn return_file(state: &Arc<Context>, code: StatusCode, path: impl AsRef<Pa
 /// # Errors
 /// This function errors if it found but failed to load a file.
 #[cfg_attr(feature = "axum-debug", axum_macros::debug_handler)]
-pub async fn handle(State(state): State<Arc<Context>>, path: Option<extract::Path<PathBuf>>) -> (StatusCode, HeaderMap, AsyncReadBody) {
+pub async fn handle(
+    State(state): State<Arc<Context>>,
+    path: Option<extract::Path<PathBuf>>,
+    ConnectInfo(client): ConnectInfo<SocketAddr>,
+) -> (StatusCode, HeaderMap, AsyncReadBody) {
     let path: PathBuf = path.map(|p| p.0).unwrap_or_default();
-    info!("Handling GET '{}'", path.display());
+    info!(target: client.to_string().as_str(), "Handling GET {:?}", path.display());
 
     // First, get the full file path
     let mut file_path: PathBuf = state.site.clone();
@@ -116,12 +121,12 @@ pub async fn handle(State(state): State<Arc<Context>>, path: Option<extract::Pat
             if path.starts_with(&state.site) {
                 path
             } else {
-                debug!("[404] Target file path '{}' escaped site directory", file_path.display());
+                debug!(target: client.to_string().as_str(), "[404] Target file path '{}' escaped site directory", file_path.display());
                 return return_file(&state, StatusCode::NOT_FOUND, &state.not_found_file).await;
             }
         },
         Err(err) => {
-            debug!("{}", trace!(("[404] Target file path '{}' cannot be canonicalized", file_path.display()), err));
+            debug!(target: client.to_string().as_str(), "{}", trace!(("[404] Target file path '{}' cannot be canonicalized", file_path.display()), err));
             return return_file(&state, StatusCode::NOT_FOUND, &state.not_found_file).await;
         },
     };
@@ -129,11 +134,11 @@ pub async fn handle(State(state): State<Arc<Context>>, path: Option<extract::Pat
     if file_path.is_dir() {
         file_path.push("index.html");
         if !file_path.exists() {
-            debug!("[404] Target file path '{}' not found", file_path.display());
+            debug!(target: client.to_string().as_str(), "[404] Target file path '{}' not found", file_path.display());
             return return_file(&state, StatusCode::NOT_FOUND, &state.not_found_file).await;
         }
     }
-    debug!("Target file path: {}", file_path.display());
+    debug!(target: client.to_string().as_str(), "Target file path: {}", file_path.display());
 
     // OK, return the file!
     return_file(&state, StatusCode::OK, file_path).await

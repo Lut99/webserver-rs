@@ -4,7 +4,7 @@
 //  Created:
 //    17 Jul 2024, 18:54:35
 //  Last edited:
-//    17 Jul 2024, 19:38:02
+//    13 Jan 2025, 22:36:56
 //  Auto updated?
 //    Yes
 //
@@ -17,10 +17,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::extract::connect_info::IntoMakeServiceWithConnectInfo;
-use axum::extract::Request;
-use axum::routing::get;
 use axum::Router;
+use axum::extract::Request;
+use axum::extract::connect_info::IntoMakeServiceWithConnectInfo;
+use axum::routing::get;
 use clap::Parser;
 use error_trace::trace;
 use humanlog::{DebugMode, HumanLogger};
@@ -28,12 +28,12 @@ use hyper::body::Incoming;
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto::Builder as HyperBuilder;
 use log::{debug, error, info, warn};
-use static_website_host::state::Context;
-use static_website_host::www;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::runtime::{Builder, Runtime};
-use tokio::signal::unix::{signal, SignalKind};
+use tokio::signal::unix::{SignalKind, signal};
 use tower_service::Service as _;
+use webserver::state::{AuthMode, Context};
+use webserver::{auth, www};
 
 
 /***** CONSTANTS *****/
@@ -100,8 +100,16 @@ fn main() {
     };
 
     // Build the paths
-    let www: Router = Router::new().route("/", get(www::handle)).route("/*path", get(www::handle)).with_state(state.clone());
-    let router: IntoMakeServiceWithConnectInfo<Router, SocketAddr> = Router::new().nest("/", www).into_make_service_with_connect_info();
+    let www = Router::new().route("/", get(www::handle)).route("/{*path}", get(www::handle));
+    let www = match &state.auth {
+        AuthMode::Basic { username, password: _ } => {
+            info!("Enabling Basic authentication with username {username:?}");
+            www.layer(axum::middleware::from_fn_with_state(state.clone(), auth::basic))
+        },
+        AuthMode::None => www,
+    };
+    let www = www.with_state(state.clone());
+    let router: IntoMakeServiceWithConnectInfo<Router, SocketAddr> = Router::new().merge(www).into_make_service_with_connect_info();
 
     // Run the main async function
     runtime.block_on(async move {

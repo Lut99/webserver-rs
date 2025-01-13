@@ -4,7 +4,14 @@ This file keeps track of notable changes to the Static Website Host codebase.
 Note that this project uses [semantic versioning](https://semver.org). Breaking changes are indicated with **(BREAKING)**.
 
 
-## v0.1.0 - TODO
+## v1.0.0 - 2025-01-13
+Renamed to `webserver`. **(BREAKING)**
+
+### Added
+- Support for protecting the hosted website with authorization.
+
+
+## v0.1.0 - 2025-01-13
 Initial release!
 
 ### Added

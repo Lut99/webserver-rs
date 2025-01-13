@@ -1,16 +1,16 @@
 services:
-  #########################
-  ## STATIC WEBSITE HOST ##
-  #########################
+  ##################
+  ## WEBSERVER-RS ##
+  ##################
 
   # The Rust webserver
-  static-website-host:
+  webserver:
     build:
       dockerfile: ./Dockerfile
       context: .
       target: release
-    container_name: static-website-host
-    user: static-website-host
+    container_name: webserver
+    user: webserver
     restart: always
     command:
     - --address
@@ -22,5 +22,5 @@ services:
     - ${WWW_DIR:-./www}:/www
 
 networks:
-  static-website-host:
+  webserver:
     driver: default
