@@ -4,7 +4,7 @@
 //  Created:
 //    17 Jul 2024, 18:59:49
 //  Last edited:
-//    13 Jan 2025, 22:39:35
+//    13 Jan 2025, 23:03:00
 //  Auto updated?
 //    Yes
 //
@@ -33,6 +33,7 @@ use crate::state::Context;
 ///
 /// # Arguments
 /// - `state`: A shared [`Context`] that situates this path.
+/// - `client`: An [`SocketAddr`] that tells us the address of the connected client.
 /// - `code`: The code to return when the streaming is a success (so far).
 /// - `path`: The full path of the file to stream back.
 ///
@@ -40,15 +41,15 @@ use crate::state::Context;
 /// Either:
 /// - 200 OK with the found file if the the user had access;
 /// - 501 INTERNAL SERVER ERROR if something went wrong while streaming the file.
-async fn return_file(state: &Arc<Context>, code: StatusCode, path: impl AsRef<Path>) -> (StatusCode, HeaderMap, AsyncReadBody) {
+async fn return_file(state: &Arc<Context>, client: SocketAddr, code: StatusCode, path: impl AsRef<Path>) -> (StatusCode, HeaderMap, AsyncReadBody) {
     let path: &Path = path.as_ref();
-    debug!("Returning file '{}' with {} {} to user", path.display(), code.as_u16(), code.canonical_reason().unwrap_or("???"));
+    debug!(target: client.to_string().as_str(), "Returning file '{}' with {} {} to user", path.display(), code.as_u16(), code.canonical_reason().unwrap_or("???"));
 
     // Attempt to open the file
     let handle: File = match File::open(path).await {
         Ok(handle) => handle,
         Err(err) => {
-            error!("{}", trace!(("Failed to open file '{}'", path.display()), err));
+            error!(target: client.to_string().as_str(), "{}", trace!(("Failed to open file '{}'", path.display()), err));
             return (code, HeaderMap::new(), AsyncReadBody::new(b"Internal server error".as_slice()));
         },
     };
@@ -65,7 +66,7 @@ async fn return_file(state: &Arc<Context>, code: StatusCode, path: impl AsRef<Pa
     let len: u64 = match handle.metadata().await {
         Ok(md) => md.len(),
         Err(err) => {
-            error!("{}", trace!(("Failed to read metadata of file '{}'", path.display()), err));
+            error!(target: client.to_string().as_str(), "{}", trace!(("Failed to read metadata of file '{}'", path.display()), err));
             return (code, HeaderMap::new(), AsyncReadBody::new(b"Internal server error".as_slice()));
         },
     };
@@ -92,6 +93,7 @@ async fn return_file(state: &Arc<Context>, code: StatusCode, path: impl AsRef<Pa
 ///
 /// # Arguments
 /// - `state`: A shared [`Context`] that situates this path.
+/// - `client`: An [`SocketAddr`] that tells us the address of the connected client.
 /// - `path`: The path of the file that was matched.
 ///
 /// # Returns
@@ -104,8 +106,8 @@ async fn return_file(state: &Arc<Context>, code: StatusCode, path: impl AsRef<Pa
 #[cfg_attr(feature = "axum-debug", axum_macros::debug_handler)]
 pub async fn handle(
     State(state): State<Arc<Context>>,
-    path: Option<extract::Path<PathBuf>>,
     ConnectInfo(client): ConnectInfo<SocketAddr>,
+    path: Option<extract::Path<PathBuf>>,
 ) -> (StatusCode, HeaderMap, AsyncReadBody) {
     let path: PathBuf = path.map(|p| p.0).unwrap_or_default();
     info!(target: client.to_string().as_str(), "Handling GET {:?}", path.display());
@@ -122,12 +124,12 @@ pub async fn handle(
                 path
             } else {
                 debug!(target: client.to_string().as_str(), "[404] Target file path '{}' escaped site directory", file_path.display());
-                return return_file(&state, StatusCode::NOT_FOUND, &state.not_found_file).await;
+                return return_file(&state, client, StatusCode::NOT_FOUND, &state.not_found_file).await;
             }
         },
         Err(err) => {
             debug!(target: client.to_string().as_str(), "{}", trace!(("[404] Target file path '{}' cannot be canonicalized", file_path.display()), err));
-            return return_file(&state, StatusCode::NOT_FOUND, &state.not_found_file).await;
+            return return_file(&state, client, StatusCode::NOT_FOUND, &state.not_found_file).await;
         },
     };
     // If it's a directory, then append `index.html`
@@ -135,11 +137,11 @@ pub async fn handle(
         file_path.push("index.html");
         if !file_path.exists() {
             debug!(target: client.to_string().as_str(), "[404] Target file path '{}' not found", file_path.display());
-            return return_file(&state, StatusCode::NOT_FOUND, &state.not_found_file).await;
+            return return_file(&state, client, StatusCode::NOT_FOUND, &state.not_found_file).await;
         }
     }
     debug!(target: client.to_string().as_str(), "Target file path: {}", file_path.display());
 
     // OK, return the file!
-    return_file(&state, StatusCode::OK, file_path).await
+    return_file(&state, client, StatusCode::OK, file_path).await
 }

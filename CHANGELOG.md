@@ -8,6 +8,7 @@ Note that this project uses [semantic versioning](https://semver.org). Breaking 
 ### Fixed
 - Broken references to `static-website-host` in Dockerfile.
 - docker-compose.yml file still using unintended port 80 instead of 42080.
+- Missing IP addresses in log-statements.
 
 
 ## v1.0.0 - 2025-01-13
