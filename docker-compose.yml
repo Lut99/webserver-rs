@@ -16,7 +16,7 @@ services:
     - --address
     - 0.0.0.0:42080
     ports:
-    - ${PORT:-80}:42080
+    - ${PORT:-42080}:42080
     volumes:
     - ${CONFIG:-./config.yml}:/config.yml
     - ${WWW_DIR:-./www}:/www
