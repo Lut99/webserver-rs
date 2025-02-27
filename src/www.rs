@@ -4,7 +4,7 @@
 //  Created:
 //    17 Jul 2024, 18:59:49
 //  Last edited:
-//    13 Jan 2025, 23:03:00
+//    27 Feb 2025, 14:23:44
 //  Auto updated?
 //    Yes
 //
@@ -39,20 +39,11 @@ use crate::state::Context;
 ///
 /// # Returns
 /// Either:
-/// - 200 OK with the found file if the the user had access;
+/// - The given status `code` with the found file if the the user had access; or
 /// - 501 INTERNAL SERVER ERROR if something went wrong while streaming the file.
 async fn return_file(state: &Arc<Context>, client: SocketAddr, code: StatusCode, path: impl AsRef<Path>) -> (StatusCode, HeaderMap, AsyncReadBody) {
     let path: &Path = path.as_ref();
     debug!(target: client.to_string().as_str(), "Returning file '{}' with {} {} to user", path.display(), code.as_u16(), code.canonical_reason().unwrap_or("???"));
-
-    // Attempt to open the file
-    let handle: File = match File::open(path).await {
-        Ok(handle) => handle,
-        Err(err) => {
-            error!(target: client.to_string().as_str(), "{}", trace!(("Failed to open file '{}'", path.display()), err));
-            return (code, HeaderMap::new(), AsyncReadBody::new(b"Internal server error".as_slice()));
-        },
-    };
 
     // Guess the file's mime type
     let mime_type: HeaderValue = match path.extension().and_then(OsStr::to_str) {
@@ -60,6 +51,16 @@ async fn return_file(state: &Arc<Context>, client: SocketAddr, code: StatusCode,
         Some("js") => HeaderValue::from_static("text/javascript"),
         Some("css") => HeaderValue::from_static("text/css"),
         _ => HeaderValue::from_static("text/plain"),
+    };
+
+    // Attempt to open the file
+    #[allow(unused_mut)]
+    let mut handle: File = match File::open(path).await {
+        Ok(handle) => handle,
+        Err(err) => {
+            error!(target: client.to_string().as_str(), "{}", trace!(("Failed to open file '{}'", path.display()), err));
+            return (code, HeaderMap::new(), AsyncReadBody::new(b"Internal server error".as_slice()));
+        },
     };
 
     // Get the file's metadata (length, to be precise)
@@ -80,6 +81,30 @@ async fn return_file(state: &Arc<Context>, client: SocketAddr, code: StatusCode,
     // Stream it as the body
     let body: AsyncReadBody = AsyncReadBody::new(handle);
     (code, headers, body)
+}
+
+/// Returns na 301 with the new location to redirect to.
+///
+/// # Arguments
+/// - `state`: A shared [`Context`] that situates this path.
+/// - `client`: An [`SocketAddr`] that tells us the address of the connected client.
+/// - `location`: A URL to redirect to.
+///
+/// # Returns
+/// The given status `code` with the redirect in the LOCATION header.
+async fn return_redirect(state: &Arc<Context>, client: SocketAddr, location: impl AsRef<str>) -> (StatusCode, HeaderMap, AsyncReadBody) {
+    let location: &str = location.as_ref();
+    debug!(target: client.to_string().as_str(), "Returning 301 MOVED PERMANENTLY to {location:?} to user");
+
+    // Build the headers
+    let mut headers: HeaderMap = HeaderMap::new();
+    headers.insert(header::CONTENT_LENGTH, HeaderValue::from(0));
+    headers.insert(header::LOCATION, HeaderValue::from_str(location).unwrap());
+    headers.insert(header::SERVER, HeaderValue::from_str(&format!("{}/{}", state.name, state.version)).unwrap());
+
+    // Stream it as the body
+    let body: AsyncReadBody = AsyncReadBody::new([].as_slice());
+    (StatusCode::MOVED_PERMANENTLY, headers, body)
 }
 
 
@@ -132,8 +157,19 @@ pub async fn handle(
             return return_file(&state, client, StatusCode::NOT_FOUND, &state.not_found_file).await;
         },
     };
-    // If it's a directory, then append `index.html`
+
+    // We do some special treatment if it's a directory
     if file_path.is_dir() {
+        // We ensure that the path ends with a slash if given
+        let last_byte: Option<u8> = path.as_os_str().as_encoded_bytes().last().cloned();
+        if state.header_settings.folder_enforce_slash && last_byte != Some(b'/') && last_byte != Some(b'\\') {
+            // Redirect with 301
+            let mut path: String = path.to_string_lossy().into();
+            path.push('/');
+            return return_redirect(&state, client, path).await;
+        }
+
+        // Otherwise, we assume the index.html file is meant
         file_path.push("index.html");
         if !file_path.exists() {
             debug!(target: client.to_string().as_str(), "[404] Target file path '{}' not found", file_path.display());

@@ -4,7 +4,7 @@
 //  Created:
 //    17 Jul 2024, 19:03:23
 //  Last edited:
-//    13 Jan 2025, 22:29:51
+//    27 Feb 2025, 14:24:38
 //  Auto updated?
 //    Yes
 //
@@ -163,7 +163,7 @@ impl AuthMode {
 
 /***** LIBRARY *****/
 /// Defines the context in which paths are executed.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Context {
     /// Some name for the file.
     #[serde(skip)]
@@ -176,6 +176,9 @@ pub struct Context {
     pub site: PathBuf,
     /// The file sent back when a file isn't found.
     pub not_found_file: PathBuf,
+    /// Additional options
+    #[serde(alias = "header-settings", default, skip_serializing_if = "HeaderSettings::is_default")]
+    pub header_settings: HeaderSettings,
     /// Whether to apply security.
     #[serde(alias = "authorization", alias = "authorisation", default = "AuthMode::none", skip_serializing_if = "AuthMode::is_none")]
     pub auth: AuthMode,
@@ -205,7 +208,14 @@ impl Context {
                 if err.kind() == ErrorKind::NotFound {
                     // Generate a default one instead
                     info!("No config file found at '{}'; generating default...", path.display());
-                    let def: Self = Self { name, version, site: "./www".into(), not_found_file: "./www/not_found.html".into(), auth: AuthMode::None };
+                    let def: Self = Self {
+                        name,
+                        version,
+                        site: "./www".into(),
+                        not_found_file: "./www/not_found.html".into(),
+                        header_settings: Default::default(),
+                        auth: AuthMode::None,
+                    };
                     match File::create(path) {
                         Ok(handle) => {
                             if let Err(err) = serde_yml::to_writer(handle, &def) {
@@ -252,5 +262,32 @@ impl Context {
         config.name = name;
         config.version = version;
         Ok(config)
+    }
+}
+
+
+
+/// Defines some smaller options to set.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct HeaderSettings {
+    /// Enforces that all URLs that are not a filename end with '/'
+    ///
+    /// This will ensure that relative redirction works in browsers.
+    pub folder_enforce_slash: bool,
+}
+impl Default for HeaderSettings {
+    #[inline]
+    fn default() -> Self { Self { folder_enforce_slash: false } }
+}
+impl HeaderSettings {
+    /// Checks whether the config is default or not.
+    ///
+    /// # Returns
+    /// True if this equals a config obtained with [`HeaderSettings::default()`], or false
+    /// otherwise.
+    #[inline]
+    pub fn is_default(&self) -> bool {
+        let Self { folder_enforce_slash } = self;
+        *folder_enforce_slash == false
     }
 }
