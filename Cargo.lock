@@ -336,8 +336,9 @@ checksum = "5443807d6dff69373d433ab9ef5378ad8df50ca6298caf15de6e52e24aaf54d5"
 
 [[package]]
 name = "error-trace"
-version = "1.1.1"
-source = "git+https://github.com/Lut99/error-trace-rs#58bd7e59aa6c81a732e6df1a60118894f60b5633"
+version = "4.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d80eeab1d29829898de1c3be1e242af75475b47452635f0ddd32a495fd5a8143"
 
 [[package]]
 name = "fnv"

@@ -15,5 +15,9 @@
 
 // Declare modules
 pub mod auth;
-pub mod state;
+pub mod context;
+pub mod server;
 pub mod www;
+
+// Use some of it in the main namespace
+pub use server::{Error, Server};

@@ -20,12 +20,12 @@ use std::sync::Arc;
 use axum::extract::{self, ConnectInfo, State};
 use axum::http::HeaderValue;
 use axum_extra::body::AsyncReadBody;
-use error_trace::trace;
+use error_trace::toplevel;
 use hyper::{HeaderMap, StatusCode, header};
 use log::{debug, error, info};
 use tokio::fs::File;
 
-use crate::state::Context;
+use crate::context::Context;
 
 
 /***** HELPER FUNCTIONS *****/
@@ -41,7 +41,12 @@ use crate::state::Context;
 /// Either:
 /// - The given status `code` with the found file if the the user had access; or
 /// - 501 INTERNAL SERVER ERROR if something went wrong while streaming the file.
-async fn return_file(state: &Arc<Context>, client: SocketAddr, code: StatusCode, path: impl AsRef<Path>) -> (StatusCode, HeaderMap, AsyncReadBody) {
+async fn return_file<C>(
+    state: &Arc<Context<C>>,
+    client: SocketAddr,
+    code: StatusCode,
+    path: impl AsRef<Path>,
+) -> (StatusCode, HeaderMap, AsyncReadBody) {
     let path: &Path = path.as_ref();
     debug!(target: client.to_string().as_str(), "Returning file '{}' with {} {} to user", path.display(), code.as_u16(), code.canonical_reason().unwrap_or("???"));
 
@@ -58,7 +63,7 @@ async fn return_file(state: &Arc<Context>, client: SocketAddr, code: StatusCode,
     let mut handle: File = match File::open(path).await {
         Ok(handle) => handle,
         Err(err) => {
-            error!(target: client.to_string().as_str(), "{}", trace!(("Failed to open file '{}'", path.display()), err));
+            error!(target: client.to_string().as_str(), "{}", toplevel!(("Failed to open file '{}'", path.display()), err));
             return (code, HeaderMap::new(), AsyncReadBody::new(b"Internal server error".as_slice()));
         },
     };
@@ -67,7 +72,7 @@ async fn return_file(state: &Arc<Context>, client: SocketAddr, code: StatusCode,
     let len: u64 = match handle.metadata().await {
         Ok(md) => md.len(),
         Err(err) => {
-            error!(target: client.to_string().as_str(), "{}", trace!(("Failed to read metadata of file '{}'", path.display()), err));
+            error!(target: client.to_string().as_str(), "{}", toplevel!(("Failed to read metadata of file '{}'", path.display()), err));
             return (code, HeaderMap::new(), AsyncReadBody::new(b"Internal server error".as_slice()));
         },
     };
@@ -76,7 +81,7 @@ async fn return_file(state: &Arc<Context>, client: SocketAddr, code: StatusCode,
     let mut headers: HeaderMap = HeaderMap::new();
     headers.insert(header::CONTENT_TYPE, mime_type);
     headers.insert(header::CONTENT_LENGTH, HeaderValue::from(len));
-    headers.insert(header::SERVER, HeaderValue::from_str(&format!("{}/{}", state.name, state.version)).unwrap());
+    headers.insert(header::SERVER, HeaderValue::from_str(&state.name).unwrap());
 
     // Stream it as the body
     let body: AsyncReadBody = AsyncReadBody::new(handle);
@@ -92,7 +97,7 @@ async fn return_file(state: &Arc<Context>, client: SocketAddr, code: StatusCode,
 ///
 /// # Returns
 /// The given status `code` with the redirect in the LOCATION header.
-async fn return_redirect(state: &Arc<Context>, client: SocketAddr, location: impl AsRef<str>) -> (StatusCode, HeaderMap, AsyncReadBody) {
+async fn return_redirect<C>(state: &Arc<Context<C>>, client: SocketAddr, location: impl AsRef<str>) -> (StatusCode, HeaderMap, AsyncReadBody) {
     let location: &str = location.as_ref();
     debug!(target: client.to_string().as_str(), "Returning 301 MOVED PERMANENTLY to {location:?} to user");
 
@@ -100,7 +105,7 @@ async fn return_redirect(state: &Arc<Context>, client: SocketAddr, location: imp
     let mut headers: HeaderMap = HeaderMap::new();
     headers.insert(header::CONTENT_LENGTH, HeaderValue::from(0));
     headers.insert(header::LOCATION, HeaderValue::from_str(location).unwrap());
-    headers.insert(header::SERVER, HeaderValue::from_str(&format!("{}/{}", state.name, state.version)).unwrap());
+    headers.insert(header::SERVER, HeaderValue::from_str(&state.name).unwrap());
 
     // Stream it as the body
     let body: AsyncReadBody = AsyncReadBody::new([].as_slice());
@@ -128,9 +133,8 @@ async fn return_redirect(state: &Arc<Context>, client: SocketAddr, location: imp
 ///
 /// # Errors
 /// This function errors if it found but failed to load a file.
-#[cfg_attr(feature = "axum-debug", axum_macros::debug_handler)]
-pub async fn handle(
-    State(state): State<Arc<Context>>,
+pub async fn handle<C>(
+    State(state): State<Arc<Context<C>>>,
     ConnectInfo(client): ConnectInfo<SocketAddr>,
     path: Option<extract::Path<PathBuf>>,
 ) -> (StatusCode, HeaderMap, AsyncReadBody) {
@@ -153,7 +157,7 @@ pub async fn handle(
             }
         },
         Err(err) => {
-            debug!(target: client.to_string().as_str(), "{}", trace!(("[404] Target file path '{}' cannot be canonicalized", file_path.display()), err));
+            debug!(target: client.to_string().as_str(), "{}", toplevel!(("[404] Target file path '{}' cannot be canonicalized", file_path.display()), err));
             return return_file(&state, client, StatusCode::NOT_FOUND, &state.not_found_file).await;
         },
     };
